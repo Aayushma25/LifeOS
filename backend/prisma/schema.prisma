@@ -1,0 +1,525 @@
+// LifeOS - Prisma schema
+// SQLite, local-first, no external services
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+model User {
+  id           String    @id @default(uuid())
+  fullName     String
+  username     String    @unique
+  email        String    @unique
+  passwordHash String
+  role         Role      @default(USER)
+  isSuspended  Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  jobApplications JobApplication[]
+  notes           Note[]
+  tasks           Task[]
+  events          CalendarEvent[]
+  subjects        Subject[]
+  assignments     Assignment[]
+  exams           Exam[]
+  studySessions   StudySession[]
+  attendance      Attendance[]
+  flashcards      Flashcard[]
+  goals           Goal[]
+  vaultMeta       VaultMeta?
+  vaultEntries    VaultEntry[]
+  logAnalyses     LogAnalysis[]
+  transactions    Transaction[]
+  budgets         Budget[]
+  habits          Habit[]
+  contacts        Contact[]
+}
+
+enum JobStatus {
+  WISHLIST
+  APPLIED
+  ASSESSMENT
+  INTERVIEW_SCHEDULED
+  INTERVIEWED
+  OFFER_RECEIVED
+  REJECTED
+  ACCEPTED
+}
+
+model JobApplication {
+  id             String    @id @default(uuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  companyName    String
+  position       String
+  department     String?
+  location       String?
+  salary         String?
+  applicationDate DateTime?
+  deadline       DateTime?
+  recruiterName  String?
+  recruiterEmail String?
+  jobUrl         String?
+  notes          String?
+  status         JobStatus @default(WISHLIST)
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+model Note {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title      String
+  content    String    @default("")
+  category   String?
+  tags       String    @default("") // comma-separated tags
+  isPinned   Boolean   @default(false)
+  isArchived Boolean   @default(false)
+  isFavorite Boolean   @default(false)
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model Task {
+  id          String       @id @default(uuid())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+  status      TaskStatus   @default(PENDING)
+  priority    TaskPriority @default(MEDIUM)
+  dueDate     DateTime?
+  labels      String       @default("") // comma-separated
+
+  parentId    String?
+  parent      Task?        @relation("Subtasks", fields: [parentId], references: [id], onDelete: Cascade)
+  subtasks    Task[]       @relation("Subtasks")
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+enum EventType {
+  EVENT
+  DEADLINE
+  EXAM
+  INTERVIEW
+  MEETING
+}
+
+model CalendarEvent {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+  type        EventType @default(EVENT)
+  startsAt    DateTime
+  endsAt      DateTime?
+  allDay      Boolean   @default(false)
+  location    String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([startsAt])
+}
+
+// ===================== PHASE 2 =====================
+// Study Planner, Assignment Manager, Flashcards, Goal Tracker
+
+model Subject {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name       String
+  code       String?
+  instructor String?
+  credits    Float    @default(3)
+  semester   String?
+  color      String   @default("#5B8FCB")
+  grade      String?  // letter grade, used by the GPA calculator once the course is complete
+
+  assignments   Assignment[]
+  exams         Exam[]
+  studySessions StudySession[]
+  attendance    Attendance[]
+  flashcards    Flashcard[]
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
+}
+
+enum AssignmentStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  SUBMITTED
+  GRADED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model Assignment {
+  id             String           @id @default(uuid())
+  userId         String
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId      String?
+  subject        Subject?         @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+
+  title          String
+  deadline       DateTime?
+  priority       Priority         @default(MEDIUM)
+  status         AssignmentStatus @default(NOT_STARTED)
+  submissionDate DateTime?
+  notes          String?
+
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+enum ExamType {
+  QUIZ
+  MIDTERM
+  FINAL
+  PRACTICAL
+  OTHER
+}
+
+model Exam {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId String?
+  subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+
+  title     String
+  type      ExamType @default(QUIZ)
+  date      DateTime
+  notes     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([date])
+}
+
+model StudySession {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId       String?
+  subject         Subject?  @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+
+  date            DateTime  @default(now())
+  durationMinutes Int       @default(25)
+  notes           String?
+
+  createdAt       DateTime  @default(now())
+
+  @@index([userId])
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  EXCUSED
+}
+
+model Attendance {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId String
+  subject   Subject          @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  date      DateTime         @default(now())
+  status    AttendanceStatus @default(PRESENT)
+
+  createdAt DateTime         @default(now())
+
+  @@index([userId])
+  @@index([subjectId])
+}
+
+model Flashcard {
+  id             String    @id @default(uuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId      String?
+  subject        Subject?  @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+
+  front          String
+  back           String
+  correctCount   Int       @default(0)
+  incorrectCount Int       @default(0)
+  lastReviewedAt DateTime?
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([subjectId])
+}
+
+enum GoalTerm {
+  SHORT_TERM
+  LONG_TERM
+}
+
+enum GoalStatus {
+  ACTIVE
+  COMPLETED
+  ABANDONED
+}
+
+model Goal {
+  id              String     @id @default(uuid())
+  userId          String
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title           String
+  description     String?
+  term            GoalTerm   @default(SHORT_TERM)
+  status          GoalStatus @default(ACTIVE)
+  targetDate      DateTime?
+  progressPercent Int        @default(0)
+
+  milestones      Milestone[]
+
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@index([userId])
+}
+
+model Milestone {
+  id          String   @id @default(uuid())
+  goalId      String
+  goal        Goal     @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  title       String
+  isCompleted Boolean  @default(false)
+  dueDate     DateTime?
+
+  createdAt   DateTime @default(now())
+
+  @@index([goalId])
+}
+
+// ===================== PHASE 3 =====================
+// Password Vault, Hash Tools (stateless, no model needed), Security Log Analyzer
+
+model VaultMeta {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  salt            String   // hex-encoded PBKDF2 salt used to derive the encryption key from the master password
+  checkCiphertext String   // a known plaintext encrypted with the derived key, used to verify the master password
+  checkIv         String
+  checkAuthTag    String
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model VaultEntry {
+  id                 String    @id @default(uuid())
+  userId             String
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  website            String
+  username           String?
+
+  passwordCiphertext String
+  passwordIv         String
+  passwordAuthTag    String
+
+  notesCiphertext    String?
+  notesIv            String?
+  notesAuthTag       String?
+
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+enum LogType {
+  LINUX_AUTH
+  WEB_ACCESS
+  GENERIC
+}
+
+model LogAnalysis {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  fileName      String
+  logType       LogType  @default(GENERIC)
+  totalLines    Int      @default(0)
+  totalEvents   Int      @default(0)
+  failedEvents  Int      @default(0)
+  uniqueIps     Int      @default(0)
+  ipBreakdown   String   @default("[]") // JSON array of { ip, total, failed, successful, flag }
+  sampleEvents  String   @default("[]") // JSON array of flagged sample lines
+
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ===================== PHASE 4 =====================
+// Expense Tracker, Habit Tracker, Contact Manager / Personal CRM
+// (Analytics Dashboard is read-only and aggregates the models above - no new table needed)
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+model Transaction {
+  id          String          @id @default(uuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type        TransactionType
+  amount      Float
+  category    String
+  description String?
+  date        DateTime        @default(now())
+
+  createdAt   DateTime        @default(now())
+
+  @@index([userId])
+  @@index([date])
+}
+
+model Budget {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  category     String
+  monthlyLimit Float
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([userId, category])
+}
+
+enum HabitFrequency {
+  DAILY
+  WEEKLY
+}
+
+model Habit {
+  id        String         @id @default(uuid())
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name      String
+  frequency HabitFrequency @default(DAILY)
+  color     String         @default("#5B8FCB")
+
+  logs      HabitLog[]
+
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([userId])
+}
+
+model HabitLog {
+  id        String   @id @default(uuid())
+  habitId   String
+  habit     Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  userId    String
+
+  date      DateTime // normalized to midnight UTC for the day being logged
+  completed Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+
+  @@unique([habitId, date])
+  @@index([userId])
+}
+
+enum ContactCategory {
+  RECRUITER
+  CLIENT
+  NETWORKING
+  OTHER
+}
+
+model Contact {
+  id           String          @id @default(uuid())
+  userId       String
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name         String
+  email        String?
+  phone        String?
+  company      String?
+  position     String?
+  category     ContactCategory @default(OTHER)
+  notes        String?
+  followUpDate DateTime?
+
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([userId])
+}
